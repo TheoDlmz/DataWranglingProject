@@ -7,8 +7,8 @@ import mysql.connector
 mydb = mysql.connector.connect(
   host="localhost",
   user="root",
-  passwd=PASSWORD,
-  database=DATBASE
+  passwd=PASSWD,
+  database=DATABASE
 )
 
 
@@ -66,11 +66,11 @@ sql("SELECT name,arrondissement, hauteur, circonf,remarquable FROM arbres WHERE 
 t1 = time.time()
 
 
-verbose=True
+verbose=False
 t2 = time.time()
-q3 = projection(selection(operation_one(R0,"hauteur","%s*20","hauteur_20","qtemp1",verbose=verbose),"circonf","hauteur_20",">","qtemp2",int=True,verbose=verbose),["name","arrondissement","hauteur","circonf","remarquable"],"q3",verbose=verbose)
+q3 = projection(selection(operation_one(R0,"hauteur","%s*20","hauteur_20","qtemp1",verbose=verbose),"circonf","hauteur_20",">","qtemp2",merging="Classic",int=True,verbose=verbose),["name","arrondissement","hauteur","circonf","remarquable"],"q3",verbose=verbose)
 t3 = time.time()
-strong_normalize(q3,verbose)
+strong_normalize(q3,True)
 t4 = time.time()
 print("Classic db : %s s"%(t1-t0))
 print("Uncertain db : %s s (+ % s for normalization)"% (t3-t2,t4-t3))
@@ -102,6 +102,7 @@ print("QUERY 4")
 print("What is the average height of trees in Q2 ?")
 # Aggregation
 
+verbose=False
 t0 = time.time()
 sql("SELECT avg(hauteur_cm) FROM q2")
 t1 = time.time()
@@ -145,7 +146,7 @@ t1 = time.time()
 t2 = time.time()
 q6 = projection(selection(selection(cross_product(q1,rename(q2,[("name","name_bis"),("circonf","circonf_bis")],"qtemp1",verbose=verbose),"qtemp2",verbose=verbose),"name","name_bis","<>","qtemp1",verbose=verbose),"circonf","circonf_bis","=","qtemp2",int=True,verbose=verbose),["name","name_bis","circonf","developpement","hauteur","hauteur_cm"],"q6",verbose=verbose)
 t3 = time.time()
-strong_normalize(q6,verbose)
+strong_normalize(q6,True)
 t4 = time.time()
 print("Classic db : %s s"%(t1-t0))
 print("Uncertain db : %s s (+ % s for normalization)"% (t3-t2,t4-t3))

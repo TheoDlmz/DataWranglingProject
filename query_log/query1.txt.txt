@@ -1,0 +1,43 @@
+DROP TABLE IF EXISTS R_qtemp1
+DROP TABLE IF EXISTS C_qtemp1
+DROP TABLE IF EXISTS F_qtemp1
+CREATE TABLE R_qtemp1 AS SELECT * FROM  (SELECT * FROM arbres_0 WHERE arrondissement = "PARIS 5E ARRDT" UNION SELECT R.* FROM arbres_0 as R JOIN C as C  ON R.id = C.tuple_id WHERE R.arrondissement is NULL and attribut = "arrondissement" and value = "PARIS 5E ARRDT" ) as T ORDER BY id
+CREATE TABLE F_qtemp1 AS SELECT * FROM F WHERE tuple_id IN (SELECT id FROM R_qtemp1)
+CREATE TABLE C_qtemp1 AS SELECT * FROM C WHERE tuple_id IN (SELECT id FROM R_qtemp1)
+ALTER TABLE R_qtemp1 ADD PRIMARY KEY (id)
+ALTER TABLE C_qtemp1 ADD PRIMARY KEY (tuple_id,attribut,lwid)
+ALTER TABLE F_qtemp1 ADD PRIMARY KEY (tuple_id,attribut)
+REPLACE INTO C_qtemp1 SELECT tuple_id,attribut,lwid,NULL as value FROM C_qtemp1 WHERE attribut = "arrondissement" and NOT(value = "PARIS 5E ARRDT")
+REPLACE INTO C_qtemp1 SELECT C1.tuple_id,C1.attribut,C1.lwid,NULL FROM C_qtemp1 as C1 JOIN F_qtemp1 as F1 JOIN F_qtemp1 as F2 JOIN C_qtemp1 as C2 ON C1.tuple_id = F1.tuple_id AND C1.attribut = F1.attribut AND C1.tuple_id = C2.tuple_id and C2.tuple_id = F2.tuple_id and C2.attribut = F2.attribut and F1.cluster = F2.cluster and C1.lwid = C2.lwid WHERE C1.value is not NULL and C2.value is NULL
+DROP TABLE IF EXISTS R_qtemp2
+DROP TABLE IF EXISTS C_qtemp2
+DROP TABLE IF EXISTS F_qtemp2
+CREATE TABLE R_qtemp2 AS SELECT * FROM  (SELECT * FROM R_qtemp1 WHERE developpement = "M" UNION SELECT R.* FROM R_qtemp1 as R JOIN C_qtemp1 as C  ON R.id = C.tuple_id WHERE R.developpement is NULL and attribut = "developpement" and value = "M" ) as T ORDER BY id
+CREATE TABLE F_qtemp2 AS SELECT * FROM F_qtemp1 WHERE tuple_id IN (SELECT id FROM R_qtemp2)
+CREATE TABLE C_qtemp2 AS SELECT * FROM C_qtemp1 WHERE tuple_id IN (SELECT id FROM R_qtemp2)
+ALTER TABLE R_qtemp2 ADD PRIMARY KEY (id)
+ALTER TABLE C_qtemp2 ADD PRIMARY KEY (tuple_id,attribut,lwid)
+ALTER TABLE F_qtemp2 ADD PRIMARY KEY (tuple_id,attribut)
+REPLACE INTO C_qtemp2 SELECT tuple_id,attribut,lwid,NULL as value FROM C_qtemp2 WHERE attribut = "developpement" and NOT(value = "M")
+REPLACE INTO C_qtemp2 SELECT C1.tuple_id,C1.attribut,C1.lwid,NULL FROM C_qtemp2 as C1 JOIN F_qtemp2 as F1 JOIN F_qtemp2 as F2 JOIN C_qtemp2 as C2 ON C1.tuple_id = F1.tuple_id AND C1.attribut = F1.attribut AND C1.tuple_id = C2.tuple_id and C2.tuple_id = F2.tuple_id and C2.attribut = F2.attribut and F1.cluster = F2.cluster and C1.lwid = C2.lwid WHERE C1.value is not NULL and C2.value is NULL
+DROP TABLE IF EXISTS R_q1
+DROP TABLE IF EXISTS C_q1
+DROP TABLE IF EXISTS F_q1
+CREATE TABLE attributs_q1 ( name VARCHAR(255))
+INSERT INTO attributs_q1 VALUES ("id"),("name"),("hauteur"),("circonf"),("domanialite")
+CREATE TABLE R_q1 AS SELECT id,name,hauteur,circonf,domanialite FROM R_qtemp2 
+CREATE TABLE C_q1 AS SELECT * FROM C_qtemp2
+CREATE TABLE F_q1 AS SELECT * FROM F_qtemp2
+ALTER TABLE R_q1 ADD PRIMARY KEY (id)
+ALTER TABLE C_q1 ADD PRIMARY KEY (tuple_id,attribut,lwid)
+ALTER TABLE F_q1 ADD PRIMARY KEY (tuple_id,attribut)
+INSERT INTO C_q1 SELECT C.tuple_id,C.attribut,max(lwid)+1,NULL FROM (SELECT DISTINCT C.tuple_id FROM F_qtemp2 as F JOIN C_qtemp2 as C ON C.attribut = F.attribut AND C.tuple_id = F.tuple_id WHERE C.tuple_id NOT IN (SELECT DISTINCT tuple_id FROM (SELECT cluster,count(distinct tuple_id) as n FROM F_qtemp2 as F GROUP BY cluster HAVING  n > 1) as T JOIN F_qtemp2 as F ON T.cluster = F.cluster) AND C.attribut not in (SELECT *  FROM attributs_q1) and C.value is NULL) as P JOIN C_qtemp2 as C ON P.tuple_id = C.tuple_id WHERE C.attribut IN (SELECT * FROM attributs_q1) AND (C.tuple_id,C.attribut) NOT IN (SELECT tuple_id,attribut FROM C_qtemp2 WHERE value is NULL) GROUP BY C.tuple_id,C.attribut
+CREATE TABLE close_clusters AS SELECT DISTINCT F1.cluster as c1, F2.cluster as c2 FROM F_q1 AS F1 JOIN F_q1 as F2 ON F1.tuple_id = F2.tuple_id WHERE F1.cluster < F2.cluster AND F1.tuple_id in (SELECT DISTINCT tuple_id FROM (SELECT cluster,count(distinct tuple_id) as n FROM F_qtemp2 as F GROUP BY cluster HAVING  n > 1) as T JOIN F_qtemp2 as F ON T.cluster = F.cluster)
+CREATE TABLE clusters2merge AS WITH RECURSIVE clusters(c1,c2) AS (SELECT * FROM close_clusters UNION ALL SELECT clust1.c1,clust2.c2 FROM clusters as clust1 JOIN close_clusters as clust2 ON clust1.c2 = clust2.c1) SELECT min(c1) as c1,c2 FROM (SELECT c1,max(c2) as c2 FROM clusters GROUP BY c1) as T group by c2
+DROP TABLE close_clusters
+SELECT COUNT(*) FROM clusters2merge
+DROP TABLE clusters2merge
+REPLACE INTO C_q1 SELECT C1.tuple_id,C1.attribut,C1.lwid,NULL FROM C_q1 as C1 JOIN F_q1 as F1 JOIN F_q1 as F2 JOIN C_q1 as C2 ON C1.tuple_id = F1.tuple_id AND C1.attribut = F1.attribut AND C1.tuple_id = C2.tuple_id and C2.tuple_id = F2.tuple_id and C2.attribut = F2.attribut and F1.cluster = F2.cluster and C1.lwid = C2.lwid WHERE C1.value is not NULL and C2.value is NULL
+DELETE FROM C_q1 WHERE attribut not in (SELECT * FROM attributs_q1)
+DELETE FROM F_q1 WHERE attribut not in (SELECT * FROM attributs_q1)
+DROP TABLE attributs_q1

@@ -1,0 +1,54 @@
+CREATE TABLE copy_C as SELECT * FROM C_q2
+CREATE TABLE copy_F as SELECT * FROM F_q2
+CREATE TABLE copy_R as SELECT * FROM R_q2
+ALTER TABLE copy_R ADD PRIMARY KEY (id)
+ALTER TABLE copy_C ADD PRIMARY KEY (tuple_id,attribut,lwid)
+ALTER TABLE copy_F ADD PRIMARY KEY (tuple_id,attribut)
+CREATE TABLE close_clusters AS SELECT DISTINCT F1.cluster as c1, F2.cluster as c2 FROM copy_F AS F1 JOIN copy_F as F2 ON F1.tuple_id = F2.tuple_id WHERE F1.cluster < F2.cluster
+CREATE TABLE clusters2merge AS WITH RECURSIVE clusters(c1,c2) AS (SELECT * FROM close_clusters UNION ALL SELECT clust1.c1,clust2.c2 FROM clusters as clust1 JOIN close_clusters as clust2 ON clust1.c2 = clust2.c1) SELECT min(c1) as c1,c2 FROM (SELECT c1,max(c2) as c2 FROM clusters GROUP BY c1) as T group by c2
+DROP TABLE close_clusters
+SELECT COUNT(*) FROM clusters2merge
+CREATE TABLE merge1 AS SELECT C.tuple_id,C.attribut,C.lwid*T.lwid2 as lwid,C.value FROM copy_C as C JOIN copy_F as F JOIN (SELECT FT.cluster as c2,max(lwid)+1 as lwid2 FROM copy_C as CT JOIN copy_F AS FT ON CT.tuple_id = FT.tuple_id AND CT.attribut = FT.attribut GROUP BY c2) as T ON C.tuple_id = F.tuple_id AND C.attribut = F.attribut WHERE (F.cluster,T.c2) in (SELECT * FROM clusters2merge)
+ALTER TABLE merge1 ADD KEY(tuple_id,attribut,lwid)
+DELETE FROM copy_C WHERE (tuple_id,attribut) in (SELECT tuple_id,attribut FROM merge1)
+INSERT INTO copy_C SELECT * FROM merge1
+DROP TABLE merge1
+CREATE TABLE merge2 AS SELECT C.tuple_id,C.attribut,C.lwid+lwid2 as lwid,C.value FROM copy_C as C JOIN copy_F as F JOIN (SELECT DISTINCT FT.cluster as c2,lwid as lwid2 FROM copy_C as CT JOIN copy_F AS FT ON CT.tuple_id = FT.tuple_id AND CT.attribut = FT.attribut AND lwid > 0) as T JOIN clusters2merge M ON M.c2 = T.c2 AND M.c1 = F.cluster  AND C.tuple_id = F.tuple_id AND C.attribut = F.attribut
+ALTER TABLE merge2 ADD KEY(tuple_id,attribut,lwid)
+INSERT INTO copy_C SELECT C.tuple_id,C.attribut,C.lwid+lwid2 as lwid,C.value FROM copy_C as C JOIN copy_F as F JOIN (SELECT DISTINCT FT.cluster as c2,lwid as lwid2 FROM copy_C as CT JOIN copy_F AS FT ON CT.tuple_id = FT.tuple_id AND CT.attribut = FT.attribut WHERE lwid > 0) as T JOIN clusters2merge as M ON M.c1 = T.c2 AND M.c2 = F.cluster AND C.tuple_id = F.tuple_id AND C.attribut = F.attribut 
+INSERT INTO copy_C SELECT * FROM merge2
+DROP TABLE merge2
+REPLACE INTO copy_F SELECT F1.tuple_id,F1.attribut,F2.c2 FROM copy_F as F1 JOIN clusters2merge as F2 ON F1.cluster = F2.c1
+DROP TABLE clusters2merge
+CREATE TABLE close_clusters AS SELECT DISTINCT F1.cluster as c1, F2.cluster as c2 FROM copy_F AS F1 JOIN copy_F as F2 ON F1.tuple_id = F2.tuple_id WHERE F1.cluster < F2.cluster
+CREATE TABLE clusters2merge AS WITH RECURSIVE clusters(c1,c2) AS (SELECT * FROM close_clusters UNION ALL SELECT clust1.c1,clust2.c2 FROM clusters as clust1 JOIN close_clusters as clust2 ON clust1.c2 = clust2.c1) SELECT min(c1) as c1,c2 FROM (SELECT c1,max(c2) as c2 FROM clusters GROUP BY c1) as T group by c2
+DROP TABLE close_clusters
+SELECT COUNT(*) FROM clusters2merge
+DROP TABLE clusters2merge
+REPLACE INTO copy_C SELECT C1.tuple_id,C1.attribut,C1.lwid,NULL FROM copy_C as C1 JOIN copy_F as F1 JOIN copy_F as F2 JOIN copy_C as C2 ON C1.tuple_id = F1.tuple_id AND C1.attribut = F1.attribut AND C1.tuple_id = C2.tuple_id and C2.tuple_id = F2.tuple_id and C2.attribut = F2.attribut and F1.cluster = F2.cluster and C1.lwid = C2.lwid WHERE C1.value is not NULL and C2.value is NULL
+CREATE TABLE normal1 AS SELECT DISTINCT cluster,lwid FROM  copy_C as C JOIN copy_F as F ON F.tuple_id = C.tuple_id AND F.attribut = C.attribut WHERE value is not NULL 
+CREATE TABLE C_temp AS SELECT DISTINCT C.tuple_id,C.attribut,C.lwid,C.value FROM (SELECT DISTINCT C.tuple_id, C.attribut, min(C.lwid) as lwid FROM copy_C as C JOIN copy_F AS F ON C.tuple_id = F.tuple_id AND C.attribut = F.attribut WHERE (cluster,lwid) NOT IN (SELECT * FROM normal1) GROUP BY C.tuple_id, C.attribut UNION SELECT DISTINCT C.tuple_id, C.attribut, lwid FROM copy_C as C JOIN copy_F AS F ON C.tuple_id = F.tuple_id AND C.attribut = F.attribut WHERE (cluster,lwid) IN (SELECT * FROM normal1)) as T JOIN copy_C as C ON C.tuple_id = T.tuple_id AND C.attribut = T.attribut AND C.lwid = T.lwid
+DROP TABLE copy_C
+CREATE TABLE copy_C as SELECT * FROM C_temp
+DROP TABLE C_temp
+DROP TABLE normal1
+ALTER TABLE copy_C ADD PRIMARY KEY(tuple_id,attribut,lwid)
+DROP TABLE IF EXISTS Ctemp
+CREATE TABLE toreindex AS SELECT DISTINCT tuple_id,attribut FROM copy_C WHERE lwid >0 AND (tuple_id,attribut,lwid) NOT IN (SELECT tuple_id,attribut,lwid+1 FROM copy_C)
+ALTER TABLE toreindex ADD KEY (tuple_id,attribut)
+CREATE TABLE Ctemp AS SELECT C1.tuple_id as tuple_id,C1.attribut as attribut,count(C2.lwid)-1 as lwid,C1.value as value FROM copy_C as C1 JOIN copy_C as C2 JOIN toreindex as T ON T.tuple_id = C1.tuple_id AND T.attribut  = C1.attribut AND C1.tuple_id = C2.tuple_id AND C1.attribut = C2.attribut WHERE C2.lwid <= C1.lwid GROUP BY C1.tuple_id,C1.attribut,C1.lwid
+INSERT INTO Ctemp SELECT * FROM copy_C as C WHERE (tuple_id,attribut) not in (select * from toreindex)
+DROP TABLE copy_C 
+DROP TABLE toreindex
+ALTER TABLE Ctemp ADD KEY(tuple_id,attribut,lwid,value)
+CREATE TABLE copy_C as SELECT * FROM Ctemp
+ DROP TABLE Ctemp
+ALTER TABLE copy_C ADD PRIMARY KEY(tuple_id,attribut,lwid)
+INSERT INTO avg_q2 SELECT DISTINCT cluster+1 as comp,c,s/c FROM (SELECT DISTINCT cluster,lwid,count(distinct F.tuple_id) as c,sum(value) as s FROM (SELECT tuple_id,lwid,value FROM copy_C WHERE attribut = "hauteur_cm" and value is not NULL) as C JOIN copy_F as F ON C.tuple_id = F.tuple_id WHERE F.attribut ="hauteur_cm" GROUP BY cluster,lwid) T
+INSERT INTO avg_q2 SELECT DISTINCT cluster+1 as comp,0,0 FROM copy_F as F JOIN copy_C as C ON C.tuple_id = F.tuple_id WHERE (cluster,lwid) NOT IN (SELECT cluster,lwid FROM (SELECT DISTINCT cluster,lwid,count(distinct F.tuple_id) as c,sum(value) as s FROM (SELECT tuple_id,lwid,value FROM copy_C WHERE attribut = "hauteur_cm" and value is not NULL) as C JOIN copy_F as F ON C.tuple_id = F.tuple_id WHERE F.attribut ="hauteur_cm" GROUP BY cluster,lwid) T)
+SELECT sum(c),sum(c*avg)/sum(c) FROM avg_q2 WHERE (comp,1) IN (SELECT comp,count(*) as n FROM avg_q2 GROUP BY comp having n = 1)
+UPDATE avg_q2 SET avg = 2450.63690000,c=314  WHERE comp = 0
+DELETE FROM avg_q2 WHERE comp  >0 and comp IN (SELECT comp FROM (SELECT comp,count(*) as n FROM avg_q2 GROUP BY comp having n = 1) T)
+DROP TABLE IF EXISTS copy_R
+DROP TABLE IF EXISTS copy_C
+DROP TABLE IF EXISTS copy_F

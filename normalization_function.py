@@ -9,13 +9,13 @@ R0 = ("arbres_0","C","F")
 ##
 
 def sql(query):
-    #print(query)
+    print(query)
     mycursor = mydb.cursor()
     mycursor.execute(query)
     return mycursor.fetchall()
 
 def sql_exec(query):
-    #print(query)
+    print(query)
     mycursor = mydb.cursor()
     mycursor.execute(query)
     mydb.commit()
@@ -152,7 +152,7 @@ def weak_normalize(T,verbose=True):
         print("[*] Weak normalization...")
     propagate_null(T,verbose)
     
-def strong_normalize(T,remove_when_one=False,verbose=True):
+def strong_normalize(T,verbose=True,remove_when_one=False):
     if verbose:
         print("[*] Strong normalization...")
     propagate_null(T,verbose)

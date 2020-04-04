@@ -349,6 +349,15 @@ def selection(T,attribut1,attribut2,operateur,target,merging="Classic",int=False
         print("[3/3] Mergeing clusters...")
     
     if merging == "Classic":
+        merge_clusters(newtab,query_rec,verbose)
+        query4a = 'SELECT C1.tuple_id,C1.lwid FROM %s as C1 JOIN %s as C2 ON C1.tuple_id = C2.tuple_id AND C1.lwid = C2.lwid WHERE C1.attribut = "%s" AND C2.attribut = "%s" AND not(C1.value %s C2.value) ' % (newC,newC,attribut1,attribut2,operateur)
+        query4 = 'REPLACE INTO %s SELECT C.tuple_id,C.attribut,C.lwid,NULL FROM %s as C JOIN (%s) as T ON C.tuple_id = T.tuple_id AND C.lwid = T.lwid WHERE C.attribut = "%s" OR C.attribut = "%s"' % (newC,newC,query4a,attribut1,attribut2)
+        if verbose:
+            print("[3/3] Selecting tuples...")
+        sql_exec(query4)
+        weak_normalize(newtab,verbose)
+        
+    elif merging == "Select":
         merge_clusters_selection(newtab,query_rec,attribut1,attribut2,operateur,verbose)
     elif merging == "1by1":
         merge_clusters_one_by_one(newtab,query_rec,verbose)
