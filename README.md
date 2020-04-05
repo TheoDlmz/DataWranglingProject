@@ -4,4 +4,4 @@ Paper of the project : https://arxiv.org/abs/cs/0606075
 
 Overleaf of the report : https://www.overleaf.com/read/gkbrmxnkmhkh
 
-Overleaf of the slides : soon
+Overleaf of the slides : https://www.overleaf.com/read/pkkbfnhnbmsn
